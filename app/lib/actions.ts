@@ -78,6 +78,47 @@ export async function deleteInvoice(id: string) {
   redirect('/dashboard/invoices');
 } 
 
+export async function updateInvoice(
+  prevState: State,
+  formData: FormData,
+) {
+  // Validate form using Zod
+  const validatedFields = FormSchema.safeParse({
+    id: formData.get('id'),
+    customerId: formData.get('customerId'),
+    amount: formData.get('amount'),
+    status: formData.get('status'),
+    date: formData.get('date'),
+  });
+  // If form validation fails, return errors early. Otherwise, continue.
+  if (!validatedFields.success) {
+    return {
+      errors: validatedFields.error.flatten().fieldErrors,
+      message: 'Missing Fields. Failed to Update Invoice.',
+    };
+  }
+  // Prepare data for insertion into the database
+  const { id, customerId, amount, status, date } = validatedFields.data;
+  const amountInCents = amount * 100;
+  // Update data in the database
+  try {
+    await sql`
+      UPDATE invoices
+      SET customer_id=${customerId}, amount=${amountInCents}, status=${status}, date=${date}
+      WHERE id=${id}
+    `;
+  } catch (error) {
+    // If a database error occurs, return a more specific error.
+    return {
+      message: 'Database Error: Failed to Update Invoice.',
+    };
+  }
+
+  // Revalidate the cache for the invoices page and redirect the user.
+  revalidatePath('/dashboard/invoices');
+  redirect('/dashboard/invoices');
+}
+
 export async function authenticate(
   prevState: string | undefined,
   formData: FormData,
