@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import postgres from "postgres";
 import { signIn } from '@/auth';
 import { AuthError } from 'next-auth';
+import bcrypt from 'bcryptjs';
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require" });
 
@@ -14,8 +15,11 @@ export type State = {
     customerId?: string[];
     amount?: string[];
     status?: string[];
+    name?: string[];
+    email?: string[];
+    password?: string[];
   };
-  message?: string | null;
+  message: string;
 };
 
 const FormSchema = z.object({
@@ -136,5 +140,105 @@ export async function authenticate(
     }
     throw error;
   }
+}
+
+// User Actions
+const UserSchema = z.object({
+  id: z.string(),
+  name: z.string({
+    invalid_type_error: "Please enter a name.",
+  }),
+  email: z.string().email({
+    message: "Please enter a valid email.",
+  }),
+  password: z.string().min(6, {
+    message: "Password must be at least 6 characters.",
+  }),
+});
+
+const CreateUser = UserSchema.omit({ id: true });
+const UpdateUser = UserSchema.omit({ id: true });
+
+export async function createUser(prevState: State, formData: FormData) {
+  const validatedFields = CreateUser.safeParse({
+    name: formData.get('name'),
+    email: formData.get('email'),
+    password: formData.get('password'),
+  });
+
+  if (!validatedFields.success) {
+    return {
+      errors: validatedFields.error.flatten().fieldErrors,
+      message: 'Missing Fields. Failed to Create User.',
+    };
+  }
+
+  const { name, email, password } = validatedFields.data;
+  
+  // Hash the password with bcrypt
+  const hashedPassword = await bcrypt.hash(password, 12);
+  
+  try {
+    await sql`
+      INSERT INTO users (name, email, password)
+      VALUES (${name}, ${email}, ${hashedPassword})
+    `;
+  } catch (error) {
+    return {
+      message: 'Database Error: Failed to Create User.',
+    };
+  }
+
+  revalidatePath('/dashboard/users');
+  redirect('/dashboard/users');
+}
+
+export async function updateUser(
+  prevState: State,
+  formData: FormData,
+) {
+  const validatedFields = UserSchema.safeParse({
+    id: formData.get('id'),
+    name: formData.get('name'),
+    email: formData.get('email'),
+    password: formData.get('password'),
+  });
+
+  if (!validatedFields.success) {
+    return {
+      errors: validatedFields.error.flatten().fieldErrors,
+      message: 'Missing Fields. Failed to Update User.',
+    };
+  }
+
+  const { id, name, email, password } = validatedFields.data;
+
+  // Hash the password with bcrypt
+  const hashedPassword = await bcrypt.hash(password, 12);
+
+  try {
+    await sql`
+      UPDATE users
+      SET name=${name}, email=${email}, password=${hashedPassword}
+      WHERE id=${id}
+    `;
+  } catch (error) {
+    return {
+      message: 'Database Error: Failed to Update User.',
+    };
+  }
+
+  revalidatePath('/dashboard/users');
+  redirect('/dashboard/users');
+}
+
+export async function deleteUser(id: string) {
+  try {
+    await sql`DELETE FROM users WHERE id=${id}`;
+    revalidatePath('/dashboard/users');
+  } catch (error) {
+    throw new Error('Database Error: Failed to Delete User.');
+  }
+  redirect('/dashboard/users');
 }
 

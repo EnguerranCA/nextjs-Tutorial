@@ -6,6 +6,8 @@ import {
   InvoicesTable,
   LatestInvoiceRaw,
   Revenue,
+  UsersTable,
+  UserForm,
 } from "./definitions";
 import { formatCurrency } from "./utils";
 
@@ -216,5 +218,46 @@ export async function fetchFilteredCustomers(query: string) {
   } catch (err) {
     console.error("Database Error:", err);
     throw new Error("Failed to fetch customer table.");
+  }
+}
+
+export async function fetchFilteredUsers(query: string) {
+  try {
+    const data = await sql<UsersTable[]>`
+		SELECT
+		  users.id,
+		  users.name,
+		  users.email,
+		  users.password
+		FROM users
+		WHERE
+		  users.name ILIKE ${`%${query}%`} OR
+        users.email ILIKE ${`%${query}%`}
+		ORDER BY users.name ASC
+	  `;
+
+    return data;
+  } catch (err) {
+    console.error("Database Error:", err);
+    throw new Error("Failed to fetch users table.");
+  }
+}
+
+export async function fetchUserById(id: string) {
+  try {
+    const data = await sql<UserForm[]>`
+      SELECT
+        users.id,
+        users.name,
+        users.email,
+        users.password
+      FROM users
+      WHERE users.id = ${id};
+    `;
+
+    return data[0];
+  } catch (error) {
+    console.error('Database Error:', error);
+    throw new Error('Failed to fetch user.');
   }
 }
